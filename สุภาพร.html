@@ -1,0 +1,247 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<title>Snake Game</title>
+	
+	<style>
+	canvas {position: absolute; border: 1px solid #000; margin: auto; top: 0; bottom: 0;  right: 0; left: 0;}
+	</style>
+</head>
+<body>
+<script type="text/javascript">
+var
+/** Constats */
+COLS = 26,
+ROWS = 26,
+EMPTY = 0,
+SNAKE = 1,
+FRUIT = 2,
+LEFT  = 0,
+UP    = 1,
+RIGHT = 2,
+DOWN  = 3,
+KEY_LEFT  = 37,
+KEY_UP    = 38,
+KEY_RIGHT = 39,
+KEY_DOWN  = 40,
+/**
+ * Game objects
+ */
+canvas,	  /* HTMLCanvas */
+ctx,	  /* CanvasRenderingContext2d */
+keystate, /* Object,keyboard inputs */
+frames,   /* number,ใช้สำหรับการเคลื่อนไหว */
+score;	  /* number,ติดตามคะแนนผู้เล่น */
+ /* Grid datastructor, ตั้งค่าขนาด ขอบเขตการเคลื่อนไหวของเกมส์
+ * @type {Object}
+ */
+grid = {
+	width: null,  /* number,จำนวนคอลัมน์*/
+	height: null, /* number,จำนวนแถว */
+	_grid: null,  /* Array ตาราง <any>,แสดงข้อมูล */
+	/* Initiate and fill a c x r grid with the value of d
+	 * @param  {any}    d คือ ทิศทาง
+	 * @param  {number} c คือ columns
+	 * @param  {number} r คือ rows
+	 */
+	init: function(d, c, r) {
+		this.width = c;
+		this.height = r;
+		this._grid = [];
+		for (var x=0; x < c; x++) {
+			this._grid.push([]);
+			for (var y=0; y < r; y++) {
+				this._grid[x].push(d);
+			}
+		}
+	},
+	
+	 /* Set ค่าตารางที่เซลล์(x, y) */
+	set: function(val, x, y) {
+		this._grid[x][y] = val;
+	},
+
+	 /* รับค่าของเซลล์ที่(x, y)*/
+	get: function(x, y) {
+		return this._grid[x][y];  //return ค่า grid
+	}
+}
+
+ /* The snake
+ * @type {Object}*/
+snake = {
+	direction: null, /* number,ทิศทาง*/
+	last: null,		 /* Object,ตัวชี้ไปยังแท็คสุดท้ายในคิว */
+	_queue: null,	 /* Array ตาราง <number>,แสดงข้อมูล*/
+	
+	/* เคลียร์คิวและกำหนดตำแหน่งเริ่มต้นและทิศทาง*/
+	init: function(d, x, y) {
+		this.direction = d;
+		this._queue = [];
+		this.insert(x, y);
+	},
+	
+	 /* Adds แท็คไปที่คิว*/
+	insert: function(x, y) {
+		//เพิ่มรายการใหม่ที่จุดเริ่มต้นของอาร์เรย์
+		this._queue.unshift({x:x, y:y});
+		this.last = this._queue[0];
+	},
+
+	 /* Removes and returns แท็คแรกในคิว
+	 * @return {Object} the first element */
+	remove: function() {
+		// returns แท็คสุดท้ายของตาราง
+		return this._queue.pop();
+	}
+};
+ /* Set ค่าสุ่มเซลล์ในตาราง*/
+function setFood() {
+	var empty = [];
+	// iterate(การวนลูปเพื่อเรียกข้อมูลต่างๆจากList)จากตารางและ ค้นหาเซลล์ว่าง
+	for (var x=0; x < grid.width; x++) {
+		for (var y=0; y < grid.height; y++) {
+			if (grid.get(x, y) === EMPTY) {
+				empty.push({x:x, y:y});
+			}
+		}
+	}
+	//เลือกสุ่มเซลล์
+	var randpos = empty[Math.round(Math.random()*(empty.length - 1))];
+	grid.set(FRUIT, randpos.x, randpos.y);
+}
+ /* Starts the game */
+
+function main() {
+	// create and initiate แท็คcanvas
+	canvas = document.createElement("canvas");
+	canvas.width = COLS*20;
+	canvas.height = ROWS*20;
+	ctx = canvas.getContext("2d");
+	// add แท็คcanvas จากส่วนของ body 
+	document.body.appendChild(canvas);
+	// sets แบบอักษร สำหรับการแสดง ผลคะแนนที่ display
+	ctx.font = "16px Consolas";
+	frames = 0;
+	keystate = {};
+	//ติดตามการป้อนข้อมูลทาง keybourd
+	document.addEventListener("keydown", function(evt) {
+		keystate[evt.keyCode] = true;
+	});
+	document.addEventListener("keyup", function(evt) {
+		delete keystate[evt.keyCode];
+	});
+	// intatiate game objects (การสร้างobjectขึ้นมาใหม่) และเริ่มวนลูป
+	init();
+	loop();
+}
+/* Resets and inits game objects  รีเซ็ต */ 
+function init() {
+	score = 0;
+	grid.init(EMPTY, COLS, ROWS);
+	var sp = {x:Math.floor(COLS/15), y:ROWS-4};
+	snake.init(UP, sp.x, sp.y);
+	grid.set(SNAKE, sp.x, sp.y);
+	setFood();
+}
+
+ /* ฟังก์ชั่นวนลูปเกม ใช้อัพเดตและแสดงผล  */
+function loop() {
+	update();
+	draw();
+	//เมื่อพร้อม จะทำการ redraw(เขียนใหม่)ใน ฟังก์ชั่นวนลูป 
+	window.requestAnimationFrame(loop, canvas);
+}
+
+ /* อัพเดตเกม*/
+function update() {
+	frames++;
+	//การเปลี่ยนทิศทางของงู
+	// ปุ่มกด
+	if (keystate[KEY_LEFT] && snake.direction !== RIGHT) {
+		snake.direction = LEFT;
+	}
+	if (keystate[KEY_UP] && snake.direction !== DOWN) {
+		snake.direction = UP;
+	}
+	if (keystate[KEY_RIGHT] && snake.direction !== LEFT) {
+		snake.direction = RIGHT;
+	}
+	if (keystate[KEY_DOWN] && snake.direction !== UP) {
+		snake.direction = DOWN;
+	}
+	//ทุกๆ 7 ฟรม ต่อการอัพเดตสถานะเกม(ความเร็วของงู)
+	if (frames%7 === 0) {
+		var nx = snake.last.x;
+		var ny = snake.last.y;
+		// อัพเดตตำแหน่ง(กล่อง)ขึ้นอยู่กับทิศทางงู
+		switch (snake.direction) {
+			case LEFT:
+				nx--;
+				break;
+			case UP:
+				ny--;
+				break;
+			case RIGHT:
+				nx++;
+				break;
+			case DOWN:
+				ny++;
+				break;
+		}
+		// checks เงื่อนไข gameover 
+		if (0 > nx || nx > grid.width-1  ||
+			0 > ny || ny > grid.height-1 ||
+			grid.get(nx, ny) === SNAKE
+		) {
+			return init();
+		}
+		// check ตำแหน่งใหม่(กล่อง)
+		if (grid.get(nx, ny) === FRUIT) {
+			// เพิ่มคะแนนและกำหนดตำแหน่งใหม่(กล่อง)
+			score++;
+			setFood();
+		} else {
+			// ออกจากคิว เพื่อเริ่มต้นใหม่
+			// ลบคะแนนออกจากตาราง
+			var tail = snake.remove();
+			grid.set(EMPTY, tail.x, tail.y);
+		}
+		//  เพิ่ม ID งูที่ตำแหน่งใหม่และรวมเข้าไปในคิวงู
+		grid.set(SNAKE, nx, ny);
+		snake.insert(nx, ny);
+	}
+}
+/*Render ตารางลงบน canvas. */
+function draw() {
+	// คำนวณ
+	var tw = canvas.width/grid.width;
+	var th = canvas.height/grid.height;
+	// iterate through the grid and draw all cells
+	for (var x=0; x < grid.width; x++) {
+		for (var y=0; y < grid.height; y++) {
+			// setสไตล์การเติมสีวัตถุต่างๆในเกม
+			switch (grid.get(x, y)) {
+				case EMPTY:
+					ctx.fillStyle = "#000000";  // สีฉาก
+					break;
+				case SNAKE:
+					ctx.fillStyle = "#BEBEBE"; // สีของงู
+					break;
+				case FRUIT:
+					ctx.fillStyle = "#f00";  // สีของวัตถุ
+					break;
+			}
+			ctx.fillRect(x*tw, y*th, tw, th);
+		}
+	}
+	// เปลี่ยนแปลงสไตล์การเติมสีของข้อความคะแนน และดึงข้อความคะแนนลงบน canvas 
+	ctx.fillStyle = "#FFFFF0";
+	ctx.fillText("score : " + score, 10, canvas.height-10);
+}
+// start และ run เกม
+main();
+</script>
+</body>
+</html>
